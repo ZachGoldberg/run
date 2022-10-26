@@ -1,0 +1,102 @@
+#!/bin/bash
+
+ORIGINALCWD=$(pwd)
+
+pushd "$base" &> /dev/null
+trap 'popd &> /dev/null' EXIT
+
+SCRIPT=$(basename "$0")
+COMMAND=${1-help}
+FUNCTION=run_$(echo $COMMAND | sed 's/-/_/g')
+shift
+
+# ensure the working directory is the directory of this script
+cd $(cd $(dirname "$0") && pwd)
+
+VERSION=`git rev-parse --short HEAD`-`date +%s`
+DATE=`date +%Y%m%d_%H%M%S`
+MYNAME=$(git config user.name | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+
+if ! [[ -n "$MYNAME" ]]; then
+  echo "Warning: Your git config name is not set but is required.  Run git config --global user.name \"<YOURNAME>\" to set your name."
+fi
+
+ROOTDIR=$(git rev-parse --show-toplevel)
+RUNPWD=`pwd`
+
+# Utility Functions
+die() {
+  echo "$@" >&2
+  exit 1
+}
+
+available_functions() {
+  declare -F | sed 's/^declare -f //' | grep '^run_'
+}
+
+available_commands() {
+  available_functions | sed 's/^run_//' | sed 's/_/-/g'
+}
+
+run_noop() {
+  return
+}
+
+run_sleep() {
+  INTERVAL=$1
+  sleep ${INTERVAL:=10}
+}
+
+
+run_withenv() {
+  $@
+}
+
+run_install_completion () {
+  echo "Installing completion to your bashrc..."
+  echo "[ -x $PWD/run ] && eval \"\`$PWD/run completion\`\"" >> ~/.bashrc
+  echo "Installed, restart bash to have working tabcompletion for ./run!"
+}
+
+run_completion() {
+  # This needs to be run through `eval` in order to work in your shell
+  cat <<EOF
+    _run_completion() {
+      COMPREPLY=( \$(COMP_WORDS="\${COMP_WORDS[*]}" COMP_CWORD=\$COMP_CWORD "\$1") )
+    }
+    complete -o default -F _run_completion ./$SCRIPT
+EOF
+}
+
+run_help() {
+        echo "Available commands:"
+        available_commands | while read name; do
+                echo "  $name"
+        done
+}
+
+# Bash completion
+if [ -n "$COMP_WORDS" ]; then
+  COMP_WORDS=( $COMP_WORDS )
+  FIRST_WORD=${COMP_WORDS[1]}
+  CURRENT_WORD=${COMP_WORDS[COMP_CWORD]}
+
+  case "$COMP_CWORD" in
+    1)
+      available_commands | grep "^$CURRENT_WORD"
+      ;;
+    3)
+  esac
+
+  exit 0
+fi
+
+# Check for invalid command
+if ! available_functions | grep -q "^$FUNCTION$"; then
+  die "'$COMMAND' is not a valid command. Type '$SCRIPT help' for possible commands."
+fi
+
+export WITHIN_RUN_ENVIRONMENT=1
+
+# Execute the command
+$FUNCTION "$@"
