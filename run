@@ -38,6 +38,10 @@ available_commands() {
   available_functions | sed 's/^run_//' | sed 's/_/-/g'
 }
 
+run_hello_world() {
+  echo "Hello World"
+}
+
 run_noop() {
   return
 }
